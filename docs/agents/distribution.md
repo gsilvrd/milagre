@@ -59,6 +59,12 @@ The `release` job of CI cuts a candidate (a tag and a draft release) for every p
 
 macOS (`build-macos.yml`) and Linux always build. Windows builds only when the `RELEASE_WINDOWS` repository variable is `true`; enable it after configuring certificate credentials or Azure Artifact Signing and verifying a signed candidate. Windows requires Authenticode signing. See [Windows signing setup](windows-signing.md) for both options. A stable Linux build signs the RPM and the APT/RPM indexes and bundles `milagre-linux-repository.tar.gz`; a beta Linux build skips the package repository, which only ever carries stable releases. DMG notarization and RPM signing are followed by feed hash refreshes. **Deploy Linux package repository** can still be dispatched by hand to redeploy a tag.
 
+## Windows from a fork
+
+Until Windows joins Publish, a fork can ship its own builds with `fork-windows-release.yml`. It merges the project's `main`, builds an unsigned installer and publishes it as the fork's latest release, weekdays at 10:00 UTC when `main` changed, or on dispatch. A build reads its releases from `updateRepository` (`--config.extraMetadata.updateRepository=owner/repo`, the project's own when unset), so the first install comes from a build with that value and later ones update themselves.
+
+The workflow must be on the fork's default branch for its schedule to run, and enabling Actions there enables the project's other workflows too: disable them. Unsigned builds warn in SmartScreen on a first install, and their updates rest on GitHub's HTTPS and the feed's SHA-512, with no publisher check.
+
 ## Beta channel
 
 Installs set to Beta in Settings read `beta-mac.yml` (`beta-linux.yml`, `beta.yml` on Windows); Stable installs read the `latest*` feeds and never see a beta. A beta takes the draft candidate (`vX.Y.Z`), builds and signs it on the beta channel, and publishes `vX.Y.Z-beta.N`, where N counts up from that candidate's highest existing beta. It skips the run when a beta for the same commit already exists. Ship one by hand with `gh workflow run publish.yml`, optionally `-f tag=vX.Y.Z` to pick a specific draft. A platform whose beta build fails is left out of that beta with a warning.

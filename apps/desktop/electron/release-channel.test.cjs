@@ -3,7 +3,14 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { test } = require("node:test");
-const { createReleaseChannelStore, configureUpdater, isChannelNotPublished, resolveBetaFeed, prepareUpdater } = require("./release-channel.cjs");
+const {
+  createReleaseChannelStore,
+  configureUpdater,
+  isChannelNotPublished,
+  resolveBetaFeed,
+  prepareUpdater,
+  updateRepository,
+} = require("./release-channel.cjs");
 
 function tempFile(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "milagre-channel-"));
@@ -118,4 +125,9 @@ test("prepareUpdater resolves the beta feed, and falls back to GitHub's lookup w
 test("a stable release without a beta feed is not an error for beta installs", () => {
   assert.equal(isChannelNotPublished(Object.assign(new Error("x"), { code: "ERR_UPDATER_CHANNEL_FILE_NOT_FOUND" })), true);
   assert.equal(isChannelNotPublished(new Error("network")), false);
+});
+
+test("releases come from the project's repository unless the build names a fork's", () => {
+  assert.deepEqual(updateRepository({}), { owner: "the-ptf", repo: "milagre-ade" });
+  assert.deepEqual(updateRepository({ updateRepository: "someone/milagre" }), { owner: "someone", repo: "milagre" });
 });

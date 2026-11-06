@@ -1,0 +1,73 @@
+# For a fork that ships its own Windows builds, which the project's Publish workflow doesn't do until signing is set up.
+# It merges the project's main into the checked-out branch, builds an unsigned installer and publishes it with latest.yml,
+# so installs built with this fork's updateRepository update themselves. The merge stays in the run: GITHUB_TOKEN can't
+# push a change to a workflow file. A conflict fails the run. Builds are unsigned: see docs/agents/distribution.md.
+name: Fork Windows release
+on:
+  workflow_dispatch:
+    inputs:
+      force:
+        description: Build even when the project's main hasn't changed since the last release
+        type: boolean
+        default: false
+  schedule:
+    - cron: "0 10 * * 1-5"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    if: github.repository != 'the-ptf/milagre'
+    runs-on: windows-latest
+    timeout-minutes: 45
+    env:
+      DO_NOT_TRACK: "1"
+      GH_TOKEN: ${{ github.token }}
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 26
+      - name: Merge the project's main
+        id: source
+        run: |
+          git remote add upstream https://github.com/the-ptf/milagre.git
+          git fetch --tags upstream main
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git merge --no-edit upstream/main
+          upstream=$(git rev-parse upstream/main)
+          last=$(gh release view --json body --jq .body 2>/dev/null | sed -n 's/^Upstream: //p' || true)
+          if [ "$last" = "$upstream" ] && [ "${{ inputs.force }}" != "true" ]; then echo "changed=false" >> "$GITHUB_OUTPUT"; else echo "changed=true" >> "$GITHUB_OUTPUT"; fi
+          line=$(git tag --list 'v[0-9]*' --sort=-v:refname | head -1 | sed -E 's/^v([0-9]+\.[0-9]+)\..*/\1/')
+          echo "version=${line}.${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+          echo "upstream=$upstream" >> "$GITHUB_OUTPUT"
+      - name: Install dependencies
+        if: steps.source.outputs.changed == 'true'
+        run: npm ci
+      - name: Build the installer
+        if: steps.source.outputs.changed == 'true'
+        run: >
+          npm run package:win --
+          --config.extraMetadata.version=${{ steps.source.outputs.version }}
+          --config.extraMetadata.updateRepository=${{ github.repository }}
+          --config.publish.owner=${{ github.repository_owner }}
+          --config.publish.repo=${{ github.event.repository.name }}
+      - name: Publish the release
+        if: steps.source.outputs.changed == 'true'
+        env:
+          VERSION: ${{ steps.source.outputs.version }}
+          UPSTREAM: ${{ steps.source.outputs.upstream }}
+        run: |
+          gh release create "v$VERSION" \
+            release/Milagre-Setup-"$VERSION"-x64.exe release/Milagre-Setup-"$VERSION"-x64.exe.blockmap release/latest.yml \
+            --target "$GITHUB_REF_NAME" --title "$VERSION" --latest --notes "Unsigned Windows build of the-ptf/milagre.
+
+          Upstream: $UPSTREAM"

@@ -23,8 +23,16 @@ function createReleaseChannelStore({ file }) {
     },
   };
 }
-const OWNER = "the-ptf";
-const REPO = "milagre-ade";
+/**
+ * The repository releases come from. A fork that publishes its own builds bakes it in with
+ * `--config.extraMetadata.updateRepository=owner/repo`; a feed set at runtime ignores app-update.yml.
+ * @param {{ updateRepository?: string }} [metadata]
+ */
+function updateRepository(metadata = /** @type {{ updateRepository?: string }} */ (/** @type {unknown} */ (require("../package.json")))) {
+  const [owner, repo] = (metadata.updateRepository ?? "the-ptf/milagre-ade").split("/");
+  return { owner, repo };
+}
+const { owner: OWNER, repo: REPO } = updateRepository();
 const GITHUB_FEED = { provider: "github", owner: OWNER, repo: REPO, releaseType: "release" };
 
 /**
@@ -105,4 +113,4 @@ function isNewerRelease(version, current) {
     previous = versionKey(`v${current}`);
   return next && previous ? compareKeys(next, previous) > 0 : version !== current;
 }
-module.exports = { createReleaseChannelStore, configureUpdater, isChannelNotPublished, resolveBetaFeed, prepareUpdater, isNewerRelease };
+module.exports = { createReleaseChannelStore, configureUpdater, isChannelNotPublished, resolveBetaFeed, prepareUpdater, isNewerRelease, updateRepository };
